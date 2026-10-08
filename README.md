@@ -15,6 +15,7 @@ Pocket DSH brings your Harness sessions into a keyboard-friendly workspace. Star
 - **Multiple agents on one screen.** Split panes on iPad and Mac, each with its own session. Hide the sidebar when you want more space.
 - **A keyboard-first workflow.** Send with Enter, use Shift+Enter for a newline, search models with `/model`, and start in the default workspace with `/new`.
 - **Readable output.** Markdown tables, code, expandable tool details, change previews, images, and collapsible reasoning. Streaming follows the bottom until you scroll away.
+- **Reading mode.** The composer and its controls fold away so the conversation gets the screen. Swipe down on the transcript, or tap the chevron under the composer. It folds on its own as soon as you scroll away from the newest message, and comes back when you reach the bottom. Which blocks survive the fold, and whether a task opens with the keyboard, are yours to set in Appearance.
 - **Voice and pictures.** Attach images, or hold to talk, release to send, and swipe to cancel. Voice transcription uses an optional server plugin.
 - **Make it yours.** Dracula, Nord, pixel and neon themes, plus a theme editor with custom colors, typography, and JSON import/export.
 
@@ -66,6 +67,17 @@ This backend is an early preview. Images, voice, model selection, full-access po
 | Complete a slash command | Tab or Enter |
 
 Closing a pane leaves its agent running on the server. The last pane stays open.
+
+## Reading on a phone
+
+The transcript is what you came for, so the controls move out of its way:
+
+- Scrolling away from the newest message collapses the composer to a one-line reply banner automatically. Reaching the bottom restores it. Turn this off in **Appearance → Reading** if you would rather nothing move on its own.
+- The chevron under the composer, or a downward swipe on a transcript that is already at its bottom, hides the composer and the whole bottom panel. A chevron at the top and the reply banner bring them back.
+- An empty block is never drawn, in any mode: the queue dock, the change review button and the attachment strip used to occupy the bottom of the screen whether or not they had anything to show.
+- **Open with the keyboard** is on by default. Turning it off keeps a task full-screen when it opens, with no keyboard and no word suggestion bar until you tap a field; scrolling back to the bottom no longer raises them either.
+
+The shell presentation keeps its own panel and is never folded.
 
 ## Roadmap
 

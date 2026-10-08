@@ -30,7 +30,90 @@ final class PocketStore: ObservableObject {
     @Published var sessions: [HarnessSession] = []
     @Published var workspaces: [HarnessWorkspace] = []
     @Published var archived = Set<String>()
-    @Published var readingMode = false
+    /// The reader's explicit claim on the screen: the conversation with the
+    /// composer and the bottom panel put away. Set by the swipe and the
+    /// chevron, cleared by the reply banner, the session switch and the
+    /// disconnect - never by a turn arriving, so a streaming answer cannot
+    /// reopen the controls over the message being read.
+    @Published var readingClaimed = false
+    /// Whether the transcript has left its bottom. The view writes it from the
+    /// scroll observer; the store reads it to derive the surface, because the
+    /// create and selection paths need to reason about the reduction too.
+    @Published var transcriptScrolledAway = false
+    /// The reader's folding preferences. The setters persist, so a view binds
+    /// a toggle to one property and the answer survives the launch.
+    @Published private(set) var readingPreferences = ReadingPreferences()
+    /// Fold the composer automatically while the transcript is scrolled away.
+    var collapseWhileReading: Bool {
+        get { readingPreferences.automaticCollapse }
+        set { updateReadingPreferences { $0.automaticCollapse = newValue } }
+    }
+    /// Take the keyboard when a conversation opens.
+    var focusComposerOnOpen: Bool {
+        get { readingPreferences.focusComposerOnOpen }
+        set { updateReadingPreferences { $0.focusComposerOnOpen = newValue } }
+    }
+    var keepQueueDock: Bool {
+        get { readingPreferences.keepQueueDock }
+        set { updateReadingPreferences { $0.keepQueueDock = newValue } }
+    }
+    var keepDiffReview: Bool {
+        get { readingPreferences.keepDiffReview }
+        set { updateReadingPreferences { $0.keepDiffReview = newValue } }
+    }
+    var keepAttachments: Bool {
+        get { readingPreferences.keepAttachments }
+        set { updateReadingPreferences { $0.keepAttachments = newValue } }
+    }
+    var keepQueuedMessages: Bool {
+        get { readingPreferences.keepQueuedMessages }
+        set { updateReadingPreferences { $0.keepQueuedMessages = newValue } }
+    }
+    private func updateReadingPreferences(_ change: (inout ReadingPreferences) -> Void) {
+        var next = readingPreferences
+        change(&next)
+        guard next != readingPreferences else { return }
+        readingPreferences = next
+        persistReadingPreferences()
+    }
+    /// The surface the conversation is on, derived from the claim, the scroll
+    /// and the preferences. A view that presents the terminal passes its own
+    /// flag to the policy instead, because the shell keeps its own panel.
+    var readingSurface: ReadingSurface {
+        ReadingSurfacePolicy.surface(claimed: readingClaimed, scrolledAway: transcriptScrolledAway, terminal: false, preferences: readingPreferences)
+    }
+    func setReadingClaimed(_ claimed: Bool) {
+        guard readingClaimed != claimed else { return }
+        readingClaimed = claimed
+        if claimed { composerFocusRequest = nil }
+    }
+    private func persistReadingPreferences() {
+        let defaults = UserDefaults.standard
+        defaults.set(readingPreferences.automaticCollapse, forKey: "harness.reading.automaticCollapse")
+        defaults.set(readingPreferences.keepQueueDock, forKey: "harness.reading.keepQueueDock")
+        defaults.set(readingPreferences.keepDiffReview, forKey: "harness.reading.keepDiffReview")
+        defaults.set(readingPreferences.keepAttachments, forKey: "harness.reading.keepAttachments")
+        defaults.set(readingPreferences.keepQueuedMessages, forKey: "harness.reading.keepQueuedMessages")
+        defaults.set(readingPreferences.focusComposerOnOpen, forKey: "harness.reading.focusComposerOnOpen")
+    }
+    private func loadReadingPreferences() {
+        let defaults = UserDefaults.standard
+        // A key that was never written keeps the built-in default rather than
+        // the Bool's `false`: an untouched install must fold the way the
+        // shipped defaults say, not the way UserDefaults' zero value does.
+        func stored(_ key: String, _ fallback: Bool) -> Bool {
+            defaults.object(forKey: key) as? Bool ?? fallback
+        }
+        let builtIn = ReadingPreferences()
+        readingPreferences = ReadingPreferences(
+            automaticCollapse: stored("harness.reading.automaticCollapse", builtIn.automaticCollapse),
+            keepQueueDock: stored("harness.reading.keepQueueDock", builtIn.keepQueueDock),
+            keepDiffReview: stored("harness.reading.keepDiffReview", builtIn.keepDiffReview),
+            keepAttachments: stored("harness.reading.keepAttachments", builtIn.keepAttachments),
+            keepQueuedMessages: stored("harness.reading.keepQueuedMessages", builtIn.keepQueuedMessages),
+            focusComposerOnOpen: stored("harness.reading.focusComposerOnOpen", builtIn.focusComposerOnOpen)
+        )
+    }
     var openDefaultTaskWhenConnected = false
     @Published var voiceRecording = false
     @Published var selectedID: String? { didSet {
@@ -396,6 +479,7 @@ final class PocketStore: ObservableObject {
            let state = try? JSONDecoder().decode(SavedPane.self, from: data) { restorePane(state) }
         primaryPane = restoringPrimary
         SavedConnections.remember(endpoint)
+        loadReadingPreferences()
     }
 
     /// Record one connection event. The record is built by
@@ -848,7 +932,12 @@ final class PocketStore: ObservableObject {
         if let old = selectedID { drafts[old] = draft }
         drafts = UserDefaults.standard.dictionary(forKey: "harness.drafts." + endpoint) as? [String: String] ?? drafts
         if let data = try? Data(contentsOf: imageDraftFile), let saved = try? PropertyListDecoder().decode([String: [OutgoingImage]].self, from: data) { imageDrafts = saved }
-        readingMode = false
+        // A selection is a new reading position: the claim belongs to the
+        // conversation that was open, and the scroll starts following the new
+        // one's bottom. The preferences are the reader's, not the session's,
+        // and survive the switch.
+        readingClaimed = false
+        transcriptScrolledAway = false
         selectedID = id; images = imageDrafts[imageDraftKey] ?? []; imageLimits = ImageLimits(); draft = drafts[id ?? ""] ?? ""; rows = []; transcript = Transcript(); assistantLive = AssistantLiveStream(); hasMore = false
         pendingText = pendingRequest?.session == id ? (pendingRequest?.text.isEmpty == true ? "Image" : pendingRequest?.text) : nil
         model = selected?.raw["projections"]["values"]["modelSelection"]["next"] ?? .null

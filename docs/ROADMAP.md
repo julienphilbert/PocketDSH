@@ -57,6 +57,7 @@ All 46 original IDs are retained below. The original audit described the **DSH a
 | G04, G05 | Full access exists from an approval; no general/default access selector | Native allows one-use decisions only; policy changes need a host contract |
 | G06, G07, G18 | Plans/goals and specialized activity states absent | No native drivers; generic running/approval status is not plan or goal support |
 | G08, G09 | Basic queue and current-draft steering exist; no item editing/removal or busy-send preference | Basic prompt enqueue works, but no visible pending native queue or steer controls; preserve Shell Enter semantics |
+| G40 | Screen use on a phone: implemented. The composer and the bottom panel fold on the reader's scroll, an explicit reading surface hides them entirely, empty blocks are no longer drawn, and the keyboard can be kept off a task that just opened | The shell presentation keeps its own panel and never folds. Fold state is per pane; no cross-device preference sync |
 | G10, G11, G12, G13, G14 | Rename/fork/turn-branch/archive and content search remain absent; search filters loaded titles | Native host lists/opens saved sessions but lacks these management operations |
 | G15, G16 | Existing workspace choice/filter; no metadata management, grouping/manual order | Native session creation uses the host workspace; no workspace catalog/management |
 | G17 | Subagents filtered out; no lineage navigation | Native child-agent execution and identity are also missing |

@@ -337,7 +337,7 @@ struct DesktopPaneView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(store.selected?.title ?? "Pocket DSH").font(.headline).lineLimit(1)
-                    if !store.readingMode, let session = store.selected {
+                    if store.readingSurface.showsHeaderDetails, let session = store.selected {
                         Text(session.cwd).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(session.cwd)
                     }
                 }
@@ -361,7 +361,7 @@ struct DesktopPaneView: View {
                     Button("Connection", systemImage: "network") { connection = true }
                 } label: { Image(systemName: "ellipsis") }.accessibilityLabel("Conversation options")
             }
-            if store.selectedID != nil && !store.readingMode {
+            if store.selectedID != nil && store.readingSurface.showsHeaderDetails {
                 HStack(spacing: 16) {
                     Label(store.modelLabel, systemImage: "cpu").lineLimit(1)
                     if store.usesNativeHarness { Text("Native Harness").foregroundStyle(theme.accent) }
@@ -371,7 +371,7 @@ struct DesktopPaneView: View {
                     Text(store.nativeShellMode ? "Enter runs · ⌘Enter asks agent" : "Enter to send · Shift+Enter for newline").lineLimit(1)
                 }.font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("desktopTaskInfo")
             }
-        }.padding(.horizontal, 20).padding(.vertical, store.readingMode ? 7 : 14)
+        }.padding(.horizontal, 20).padding(.vertical, store.readingSurface.showsHeaderDetails ? 14 : 7)
             .modifier(HarnessNavigationSurface()).padding(theme.usesGlass ? 8 : 0)
     }
 }

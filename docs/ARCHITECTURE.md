@@ -11,6 +11,7 @@ Pocket DSH is a native client with two explicit backends. DeepSeek Harness owns 
 | Conversation, editor, keyboard commands | `HarnessView.swift` |
 | Markdown and change previews | `AssistantMarkdown.swift`, `MarkdownBlocks.swift` |
 | Themes and theme editor | `Appearance.swift` |
+| Reading surface and fold policy | `ReadingSurface.swift` |
 | Attachments and recording | `ImageAttachments.swift`, `ImageViews.swift`, `VoiceRecorder.swift` |
 | Offline screenshot fixtures (Debug only) | `DemoData.swift` |
 | Native wire contract | `Shared/NativeWire.swift` |

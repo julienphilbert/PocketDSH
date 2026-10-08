@@ -974,7 +974,7 @@ final class ParkedTransport: RemoteStreamTransport {
         let catalog: JSON
         let loadingHistory: Bool
         var nativeReady: Bool
-        let readingMode: Bool
+        let readingSurface: ReadingSurface
         let hasMore: Bool
         let pendingText: String?
         let newlyCreatedSession: String?
@@ -1000,7 +1000,7 @@ final class ParkedTransport: RemoteStreamTransport {
             catalog = store.catalog
             loadingHistory = store.loadingHistory
             nativeReady = store.nativeReady
-            readingMode = store.readingMode
+            readingSurface = store.readingSurface
             hasMore = store.hasMore
             pendingText = store.pendingText
             newlyCreatedSession = store.newlyCreatedSession

@@ -182,7 +182,13 @@ struct HarnessView: View {
     private func resumeFollowing() {
         stickToBottom = true
         scrollRequest += 1
-        if activePane && !modelPalette && !connection && !appearance { store.composerFocusRequest = UUID() }
+        // Reaching the bottom restores the composer, not the keyboard. The
+        // focus lands again only when the reader asked to open with it, when
+        // they tapped the reply banner, or when a send returns them here -
+        // otherwise scrolling to the newest message would raise the keyboard
+        // and its suggestion bar over the message they came to read, which is
+        // the behaviour this surface exists to stop.
+        if activePane && !modelPalette && !connection && !appearance && store.focusComposerOnOpen { store.composerFocusRequest = UUID() }
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -251,17 +257,23 @@ struct HarnessView: View {
                     }
             }.clipped()
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if !terminalInput { bottomPanel }
+                    if !terminalInput && surface.showsPanel { bottomPanel }
                 }
+                .overlay(alignment: .bottom) {
+                    if !terminalInput && (surface == .full || surface == .reading) { readingHandle }
+                }
+                .simultaneousGesture(readingGesture)
             // Terminal output and input occupy separate layout regions: the
             // transcript must never paint underneath the unboxed prompt.
             if terminalInput { bottomPanel }
 
         }.background { ThemeBackdrop() }
-            .onAppear { if activePane { store.composerFocusRequest = UUID() } }
-            .onChange(of: activePane) { _, active in if active { store.composerFocusRequest = UUID() } }
+            .onAppear { if activePane && surface.showsFullComposer && store.focusComposerOnOpen { store.composerFocusRequest = UUID() } }
+            .onChange(of: activePane) { _, active in if active && surface.showsFullComposer && store.focusComposerOnOpen { store.composerFocusRequest = UUID() } }
+            .onChange(of: stickToBottom) { _, following in store.transcriptScrolledAway = !following }
             #if !targetEnvironment(macCatalyst)
-            .navigationTitle(store.selected?.title ?? "New task").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(store.selected?.title ?? "New task").navigationBarTitleDisplayMode(surface.showsComposer ? .inline : .large)
+            .toolbar(surface.showsComposer ? .visible : .hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -275,7 +287,6 @@ struct HarnessView: View {
             .sheet(isPresented: $appearance) { AppearanceView() }.sheet(isPresented: $connection) { ConnectionView() }
             .sheet(isPresented: $modelPalette, onDismiss: { store.composerFocusRequest = UUID() }) { ModelPaletteView().environmentObject(store).environment(\.harnessTheme, theme) }
             .onChange(of: terminalInput) { _, _ in
-                store.readingMode = false
                 store.composerFocusRequest = UUID()
             }
             .onChange(of: store.draft) { _, text in
@@ -283,22 +294,99 @@ struct HarnessView: View {
             }
             .fullAccessConfirmation(store)
     }
+
+    /// The surface this conversation renders. The terminal presentation keeps
+    /// its own panel and never folds, so it is pinned to the full surface.
+    private var surface: ReadingSurface {
+        ReadingSurfacePolicy.surface(claimed: store.readingClaimed, scrolledAway: store.transcriptScrolledAway, terminal: terminalInput, preferences: store.readingPreferences)
+    }
+    private func shows(_ block: ReadingPanelBlock, content: Bool) -> Bool {
+        ReadingSurfacePolicy.shows(block, hasContent: content, surface: surface, preferences: store.readingPreferences)
+    }
+    private func claimReading() {
+        // The keyboard is what makes the suggestion bar appear over a
+        // conversation nobody is typing into; folding the controls drops the
+        // focus with them.
+        composerFocused = false
+        dismissKeyboard()
+        store.setReadingClaimed(true)
+    }
+    private func leaveReading() {
+        store.setReadingClaimed(false)
+        store.composerFocusRequest = UUID()
+    }
+    /// Resign every editor in the window. The focus state drives the SwiftUI
+    /// field, but the desktop editor is a UIKit view the state does not own,
+    /// so the fold has to end its editing directly for the keyboard - and the
+    /// suggestion bar above it - to come down with the controls.
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+    /// The swipe that claims the screen, and the one that gives it back.
+    ///
+    /// Claiming is a downward drag that starts high on the transcript and is
+    /// pulling the content down rather than scrolling it up: `stickToBottom`
+    /// is the scroll's own answer, and a reader already at the bottom pulling
+    /// further down has nothing left to scroll, so the drag is unambiguously
+    /// the reader asking for the screen. Anywhere else - mid-transcript, or
+    /// dragging the list - the gesture is left to the scroller untouched.
+    ///
+    /// Giving the screen back is an upward drag that starts in the bottom
+    /// strip, where the composer used to be and where no transcript content
+    /// lives: the same short flick the reader already uses to bring a bar
+    /// back.
+    private var readingGesture: some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onEnded { value in
+                guard !terminalInput else { return }
+                let vertical = value.translation.height
+                guard abs(vertical) > abs(value.translation.width) * 1.5 else { return }
+                if surface == .reading {
+                    if vertical < -50, value.startLocation.y > readingHandleBand { leaveReading() }
+                    return
+                }
+                // Claiming needs the transcript to be unable to consume the
+                // drag: it is already at its bottom, or the reader is pulling
+                // down against the top of the loaded history.
+                if vertical > 70, stickToBottom { claimReading() }
+            }
+    }
+    /// Where the floating chevron sits. The upward swipe only claims the
+    /// screen from below this line, so a drag through the middle of the
+    /// transcript is never read as a request to reopen the controls.
+    private var readingHandleBand: CGFloat { 90 }
+    /// The visible way in and out of the folded surface: a small chevron
+    /// floating at the bottom edge. The swipe is quicker once known, but
+    /// nothing should depend on the reader discovering a gesture. It sits
+    /// over the transcript, so it is small, translucent and never captures a
+    /// drag - one tap, in whichever direction the surface can move.
+    private var readingHandle: some View {
+        Button { if surface == .reading { leaveReading() } else { claimReading() } } label: {
+            Image(systemName: surface == .reading ? "chevron.up" : "chevron.down")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 46, height: 24)
+                .background(.regularMaterial, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, surface == .reading ? 10 : 0)
+        .accessibilityLabel(surface == .reading ? "Show the composer and controls" : "Hide the controls and read")
+        .accessibilityIdentifier(surface == .reading ? "leaveReadingMode" : "enterReadingMode")
+    }
     private var bottomPanel: some View {
         VStack(spacing: 0) {
-            if let error = store.error { HStack { Text(error).font(.caption).foregroundStyle(.orange); Spacer(); Button { store.error = nil } label: { Image(systemName: "xmark").font(.caption) } }.padding(.horizontal, 20).padding(.vertical, 8) }
-            if let interaction = store.currentInteractions.first { InteractionView(item: interaction).id(interaction.id).frame(maxWidth: 560).frame(maxWidth: .infinity).padding(.horizontal, 16).padding(.bottom, 8) }
-            if store.usesNativeHarness { QueueDockView().padding(.horizontal, 16).padding(.bottom, 8) }
-            if store.usesNativeHarness { HStack { DiffReviewButton(); Spacer(minLength: 0) }.padding(.horizontal, 16).padding(.bottom, 8) }
-            if !store.currentQueue.isEmpty {
+            if let error = store.error, shows(.error, content: true) { HStack { Text(error).font(.caption).foregroundStyle(.orange); Spacer(); Button { store.error = nil } label: { Image(systemName: "xmark").font(.caption) } }.padding(.horizontal, 20).padding(.vertical, 8) }
+            if let interaction = store.currentInteractions.first, shows(.interaction, content: true) { InteractionView(item: interaction).id(interaction.id).frame(maxWidth: 560).frame(maxWidth: .infinity).padding(.horizontal, 16).padding(.bottom, 8) }
+            if store.usesNativeHarness, shows(.queueDock, content: !store.nativeQueue.isEmpty) { QueueDockView().padding(.horizontal, 16).padding(.bottom, 8) }
+            if store.usesNativeHarness, shows(.diffReview, content: store.canReviewDiff) { HStack { DiffReviewButton(); Spacer(minLength: 0) }.padding(.horizontal, 16).padding(.bottom, 8) }
+            if !store.currentQueue.isEmpty, shows(.queuedMessages, content: true) {
                 DisclosureGroup("Queued: \(store.currentQueue.count)") {
                     ForEach(store.currentQueue, id: \.pretty) { item in Text(JSON.text(item["message"]["content"])).font(.caption).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4) }
                 }.font(.caption).padding(.horizontal, 22).padding(.bottom, 8)
             }
-            if store.readingMode {
-                Button {
-                    store.readingMode = false
-                    store.composerFocusRequest = UUID()
-                } label: {
+            if ReadingSurfacePolicy.showsReplyBanner(surface: surface) {
+                Button { leaveReading() } label: {
                     HStack {
                         Image(systemName: "square.and.pencil")
                         Text(store.draft.isEmpty ? "Reply…" : store.draft).lineLimit(1)
@@ -307,15 +395,16 @@ struct HarnessView: View {
                         Image(systemName: "chevron.up")
                     }.padding(.horizontal, 18).frame(minHeight: 44)
                 }.buttonStyle(.plain).accessibilityIdentifier("expandComposer")
+                .accessibilityLabel("Show the composer")
             }
-            composer.frame(height: store.readingMode ? 0 : nil).clipped()
-                .opacity(store.readingMode ? 0 : 1).allowsHitTesting(!store.readingMode)
-                .accessibilityHidden(store.readingMode)
+            composer.frame(height: surface.showsFullComposer ? nil : 0).clipped()
+                .opacity(surface.showsFullComposer ? 1 : 0).allowsHitTesting(surface.showsFullComposer)
+                .accessibilityHidden(!surface.showsFullComposer)
         }
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: terminalInput ? 10 : 13) {
-            if store.usesNativeHarness { ShellAttachmentStrip() }
+            if store.usesNativeHarness, ReadingSurfacePolicy.showsAttachments(hasContent: !store.shellAttachments.isEmpty || !store.shellDiffAttachments.isEmpty, surface: surface, preferences: store.readingPreferences) { ShellAttachmentStrip() }
             if terminalInput {
                 HStack(spacing: 8) {
                     Image(systemName: "terminal").foregroundStyle(theme.accent)
@@ -442,7 +531,7 @@ struct HarnessView: View {
             HStack(alignment: .top, spacing: 8) {
             if terminalInput { Text("❯").font(.system(size: 16, weight: .semibold, design: .monospaced)).foregroundStyle(theme.accent).padding(.top, desktopComposer ? 8 : 0).accessibilityHidden(true) }
             if desktopComposer {
-            DesktopPromptEditor(text: $store.draft, focusRequest: $store.composerFocusRequest, collapsed: store.readingMode, ink: theme.ink, monospaced: terminalInput, textSize: theme.messageSize, textShadow: theme.glassSettings.shadow, suggestionsVisible: !commandMatches.isEmpty, moveSuggestion: moveCommand, completeSuggestion: completeCommand, dismissSuggestions: { commandsDismissed = true }, sendToAgent: store.currentInteractions.isEmpty ? sendPrompt : nil, send: sendPrompt)
+            DesktopPromptEditor(text: $store.draft, focusRequest: $store.composerFocusRequest, collapsed: !surface.showsFullComposer, ink: theme.ink, monospaced: terminalInput, textSize: theme.messageSize, textShadow: theme.glassSettings.shadow, suggestionsVisible: !commandMatches.isEmpty, moveSuggestion: moveCommand, completeSuggestion: completeCommand, dismissSuggestions: { commandsDismissed = true }, sendToAgent: store.currentInteractions.isEmpty ? sendPrompt : nil, send: sendPrompt)
                 .fixedSize(horizontal: false, vertical: true)
             } else {
             TextField(terminalInput ? "Message agent… /model · /view" : "Give your agent a task…", text: $store.draft, axis: .vertical)

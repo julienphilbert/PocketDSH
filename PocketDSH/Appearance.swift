@@ -117,11 +117,50 @@ struct AppearanceView: View {
                             }.padding(14).harnessSurface(radius: 18)
                         }.buttonStyle(.plain).accessibilityIdentifier("theme-" + option.rawValue).accessibilityAddTraits(selection == option.rawValue ? .isSelected : [])
                     }
+                    ReadingSettingsSection()
                 }.padding(.horizontal, 22).padding(.bottom, 25)
             }.background { ThemeBackdrop() }.foregroundStyle(theme.ink)
                 .navigationTitle("Appearance").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }.tint(theme.accent)
+    }
+}
+
+/// The reading surface settings: how much of the screen the conversation
+/// keeps while it is being read, and which of the composer's blocks survive
+/// the fold. The defaults fold everything that only matters while composing,
+/// because the complaint this section answers is precisely that the controls
+/// are always there.
+struct ReadingSettingsSection: View {
+    @EnvironmentObject private var store: PocketStore
+    @Environment(\.harnessTheme) private var theme
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Reading").font(.headline).padding(.top, 20)
+            Text("The composer and its controls fold away while you read, so the conversation gets the screen.")
+                .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                toggle("Collapse while I read", isOn: $store.collapseWhileReading, id: "readingAutomaticCollapse")
+                Text("Reduce the composer to one reply line as soon as you scroll away from the newest message.")
+                    .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.bottom, 10)
+                toggle("Open with the keyboard", isOn: $store.focusComposerOnOpen, id: "readingFocusOnOpen")
+                Text("Off keeps the conversation full-screen when a task opens, with no keyboard or word suggestions until you tap a field.")
+                    .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.bottom, 10)
+                Divider().padding(.vertical, 4)
+                Text("Keep while reading").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.bottom, 4)
+                toggle("Queued requests", isOn: $store.keepQueueDock, id: "readingKeepQueue")
+                toggle("Review changes", isOn: $store.keepDiffReview, id: "readingKeepDiff")
+                toggle("Attached blocks", isOn: $store.keepAttachments, id: "readingKeepAttachments")
+                toggle("Queued messages", isOn: $store.keepQueuedMessages, id: "readingKeepQueued")
+            }.harnessSurface(radius: 18)
+        }.accessibilityIdentifier("readingSettings")
+    }
+    private func toggle(_ title: String, isOn: Binding<Bool>, id: String) -> some View {
+        Toggle(title, isOn: isOn)
+            .font(.subheadline)
+            .tint(theme.accent)
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .accessibilityIdentifier(id)
     }
 }
 

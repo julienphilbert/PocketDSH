@@ -4,6 +4,10 @@ cd "$(dirname "$0")/.."
 mkdir -p .build/checks
 xcrun swiftc -parse-as-library PocketDSH/HarnessProtocol.swift PocketDSH/HarnessAPI.swift PocketDSH/ImageAttachments.swift Tests/ProtocolChecks.swift -o .build/checks/protocol-checks
 .build/checks/protocol-checks
+# The reading-surface policy is pure: it compiles with no view, no store and
+# no wire, so the fold the phone depends on is asserted on its own rules.
+xcrun swiftc -parse-as-library PocketDSH/ReadingSurface.swift Tests/ReadingSurfaceChecks.swift -o .build/checks/reading-surface-checks
+.build/checks/reading-surface-checks
 xcrun swiftc -parse-as-library PocketDSH/SavedConnections.swift Tests/SavedConnectionChecks.swift -o .build/checks/connection-checks
 .build/checks/connection-checks
 # The shared confirmation gate now names the control types it carries, so
