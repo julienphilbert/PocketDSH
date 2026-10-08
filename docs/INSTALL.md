@@ -6,11 +6,32 @@ Install Xcode with iOS and Mac Catalyst support. Open the checked-in project dir
 
 `Config/Build.xcconfig` optionally includes `Config/Local.xcconfig`. Copy the example and enter your own development team for signing. Never commit certificates, provisioning profiles, credentials, or local configuration.
 
+A free (Personal Team) account usually cannot register `dev.awis.PocketDSH`, because that identifier already belongs to another team. Xcode then fails with *"Failed Registering Bundle Identifier"* and offers no profile. Set `POCKET_BUNDLE_ID` in `Config/Local.xcconfig` to an identifier the account can register - Xcode's own suggestion suffixes the account name, as in `dev.awis.PocketDSHsheeft` - and `project.yml` picks it up:
+
+```
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+POCKET_BUNDLE_ID = dev.awis.PocketDSHyourname
+```
+
+`xcodegen generate` must run after changing it. Without `POCKET_BUNDLE_ID` the project keeps the repository's default identifier, so the public build is unaffected.
+
 For a Mac build, run `scripts/build-mac.sh`. The result is `output/mac/PocketDSH.app`. The script does not replace an installed app.
 
 ## iPhone and iPad
 
 Select your device in Xcode, enable development signing, and run. Device trust and Developer Mode may need to be enabled on the device.
+
+To build and install from the command line, with the device connected:
+
+```sh
+xcodebuild -project PocketDSH.xcodeproj -scheme PocketDSH \
+  -configuration Debug -destination 'id=<device-udid>' \
+  -derivedDataPath .build -allowProvisioningUpdates build
+xcrun devicectl device install app --device <device-udid> \
+  .build/Build/Products/Debug-iphoneos/PocketDSH.app
+```
+
+`xcrun devicectl list devices` prints the UDIDs. A Personal Team profile expires after seven days; reinstalling refreshes it.
 
 For an AltStore import, first build for an **iOS device**, then package the app:
 

@@ -1,2 +1,7 @@
 // Copy to Local.xcconfig and use your own Apple development team.
 DEVELOPMENT_TEAM = YOUR_TEAM_ID
+// Optional. A free (Personal Team) account cannot register the repository's
+// default identifier, so set an identifier it can register - Xcode's own
+// suggestion suffixes the account name, as in dev.awis.PocketDSHyourname.
+// Run `xcodegen generate` after changing it.
+// POCKET_BUNDLE_ID = dev.awis.PocketDSHyourname
